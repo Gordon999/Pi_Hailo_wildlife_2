@@ -26,9 +26,7 @@ Change line 132 to suit your required detections ....
 
 Note the numbers of the objects above are the positions in coco.txt file
 
-Note in line 89 the width and height are set for a Pi GS camera, you may need to change to suit other cameras ....
-
-    video_w, video_h    = 1456,1088
+v_width and v_height are set for a Pi GS camera, you may need to change to suit other cameras ....
 
 Runs a pre-capture buffer of approx 5 seconds, set in line 20, pre_frames = 5
 
