@@ -6,7 +6,7 @@ Pi5 + Hailo HAT + PI Camera to capture Wildlife videos
 
 ![screenshot](camera.jpg)
 
-It is a modified version of the hailo picamera2 detect.py example 
+It is a modified version of the hailo picamera2 detect.py example https://github.com/raspberrypi/picamera2/tree/main/examples/hailo
 
 To setup the hailo..
 
