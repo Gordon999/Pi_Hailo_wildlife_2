@@ -37,7 +37,7 @@ thickness = 2
 # shutdown time
 sd_hour = 20
 sd_mins = 30
-auto_sd = 1  # set to 1 to shutdown at set time
+auto_sd = 0 # set to 1 to shutdown at set time
 
 # ram limit
 ram_limit = 150 # stops recording if ram below this
