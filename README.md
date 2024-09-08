@@ -20,7 +20,7 @@ reboot
 
 Captures videos and makes .mp4 videos
 
-Change line 132 to suit your required detections .... 
+Change line 158 to suit your required detections .... 
 
     if len(results[0][15]) != 0 or len(results[0][21]) != 0 or len(results[0][14]) != 0: # cat,bear or bird
 
