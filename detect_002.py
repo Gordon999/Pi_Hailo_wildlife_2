@@ -155,7 +155,7 @@ if __name__ == "__main__":
                 detections = extract_detections(results[0], video_w, video_h, class_names, args.score_thresh)
 
                 # detection
-                if len(results[0][15]) != 0 or len(results[0][21]) != 0 or len(results[0][74]) != 0: # cat,bear or clock
+                if len(results[0][15]) != 0 or len(results[0][21]) != 0 or len(results[0][14]) != 0: # cat,bear or bird
                     start = time.monotonic()
                     start2 = time.monotonic()
                     # start recording
