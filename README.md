@@ -10,11 +10,11 @@ It is a modified version of the hailo picamera2 detect.py example
 
 To setup the hailo..
 
-sudo apt install hailo-all
+     sudo apt install hailo-all
 
 reboot
 
-git clone --depth 1 https://github.com/raspberrypi/picamera2
+     git clone --depth 1 https://github.com/raspberrypi/picamera2
 
 reboot
 
