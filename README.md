@@ -28,7 +28,7 @@ Note the numbers of the objects above are the positions in coco.txt file
 
 v_width and v_height are set for a Pi GS camera, you may need to change to suit other cameras ....
 
-Runs a pre-capture buffer of approx 5 seconds, set in line 20, pre_frames = 5
+Runs a pre-capture buffer of approx 5 seconds, set in line 24, pre_frames = 5
 
 Copy detect_002.py into /home/USERNAME/picamera2/examples/hailo/
 
