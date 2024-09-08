@@ -1,4 +1,4 @@
-# Pi_Hailo_wildlife_2
+ # Pi_Hailo_wildlife_2
 
 Pi5 + Hailo HAT + PI Camera to capture Wildlife videos
 
@@ -26,7 +26,7 @@ Change line 132 to suit your required detections ....
 
 Note in line 89 the width and height are set for a Pi GS camera, you may need to change to suit other cameras ....
 
-  video_w, video_h    = 1456,1088
+    video_w, video_h    = 1456,1088
 
 Runs a pre-capture buffer of approx 5 seconds, set in line 20, pre_frames = 5
 
