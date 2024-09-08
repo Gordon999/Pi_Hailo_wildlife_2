@@ -2,7 +2,10 @@
 
 """Example module for Hailo Detection."""
 
+#v0.02
+
 import argparse
+import cv2
 from picamera2 import MappedArray, Picamera2, Preview
 from picamera2.devices import Hailo
 from picamera2.encoders import H264Encoder
@@ -15,11 +18,21 @@ import datetime
 import shutil
 
 # set variables
-v_length   = 10  # seconds, minimum video length
-pre_frames = 5   # seconds,  defines length of pre-trigger buffer
-fps        = 25  # video frame rate
-mp4_fps    = 25  # mp4 frame rate
-mp4_timer  = 30  # convert to mp4 after this time if no detections
+v_width    = 1456 # video width
+v_height   = 1088 # video height
+v_length   = 10   # seconds, minimum video length
+pre_frames = 5    # seconds,  defines length of pre-trigger buffer
+fps        = 25   # video frame rate
+mp4_fps    = 25   # mp4 frame rate
+mp4_timer  = 30   # seconds, convert h264s to mp4s after this time if no detections
+mp4_anno   = 1    # apply timestamps to video, 1 = yes, 0 = no
+
+# mp4_annotation parameters
+colour    = (255, 255, 255)
+origin    = (10, int(v_height - 50))
+font      = cv2.FONT_HERSHEY_SIMPLEX
+scale     = 1
+thickness = 2
 
 # shutdown time
 sd_hour = 20
@@ -57,6 +70,19 @@ def draw_objects(request):
                 cv2.putText(m.array, label, (x0 + 5, y0 + 15),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0, 0), 1, cv2.LINE_AA)
 
+# apply timestamp to videos
+def apply_timestamp(request):
+  global mp4_anno
+  if mp4_anno == 1:
+      timestamp = time.strftime("%Y/%m/%d %T")
+      with MappedArray(request, "main") as m:
+          lst = list(origin)
+          lst[0] += 365
+          lst[1] -= 20
+          end_point = tuple(lst)
+          cv2.rectangle(m.array, origin, end_point, (0,0,0), -1) 
+          cv2.putText(m.array, timestamp, origin, font, scale, colour, thickness)
+          
 if __name__ == "__main__":
 
     # find user
@@ -85,7 +111,7 @@ if __name__ == "__main__":
     # Get the Hailo model, the input size it wants, and the size of our preview stream.
     with Hailo(args.model) as hailo:
         model_h, model_w, _ = hailo.get_input_shape()
-        video_w, video_h    = 1456,1088
+        video_w, video_h    = v_width,v_height
 
         # Load class names from the labels file
         with open(args.labels, 'r', encoding="utf-8") as f:
@@ -105,6 +131,7 @@ if __name__ == "__main__":
             picam2.configure(config)
             encoder = H264Encoder(4000000, repeat=True)
             encoder.output = CircularOutput(buffersize = pre_frames * fps)
+            picam2.pre_callback = apply_timestamp
             picam2.start_preview(Preview.QTGL, x=0, y=0, width=model_w, height=model_h)
             picam2.start()
             picam2.start_encoder(encoder)
@@ -149,9 +176,10 @@ if __name__ == "__main__":
                     encoding = False
                     start2 = time.monotonic()
 
+                # make mp4s
                 if time.monotonic() - start2 > mp4_timer and not encoding:
                     start2 = time.monotonic()
-                    # convert to mp4
+                    # convert h264 to mp4
                     h264s = glob.glob('/run/shm/2*.h264')
                     h264s.sort(reverse = False)
                     for x in range(0,len(h264s)):
