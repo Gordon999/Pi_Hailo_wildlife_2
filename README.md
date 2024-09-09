@@ -1,4 +1,4 @@
- # Pi_Hailo_wildlife_2
+# Pi_Hailo_wildlife_2
 
 Pi5 + Hailo HAT + PI Camera to capture Wildlife videos
 
@@ -22,7 +22,7 @@ Captures videos and makes .mp4 videos
 
 v_width and v_height are set for a Pi GS camera, you may need to change to suit other cameras ....
 
-Runs a pre-capture buffer of approx 5 seconds, set in line 24, pre_frames = 5
+Runs a pre-capture buffer of approx 5 seconds, set in line 27, pre_frames = 5
 
 Copy detect_002.py into /home/USERNAME/picamera2/examples/hailo/
 
