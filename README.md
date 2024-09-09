@@ -20,12 +20,6 @@ reboot
 
 Captures videos and makes .mp4 videos
 
-Change line 158 to suit your required detections .... 
-
-    if len(results[0][15]) != 0 or len(results[0][21]) != 0 or len(results[0][14]) != 0: # cat,bear or bird
-
-Note the numbers of the objects above are the positions in coco.txt file
-
 v_width and v_height are set for a Pi GS camera, you may need to change to suit other cameras ....
 
 Runs a pre-capture buffer of approx 5 seconds, set in line 24, pre_frames = 5
