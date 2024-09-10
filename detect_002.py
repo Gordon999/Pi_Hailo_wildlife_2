@@ -2,7 +2,7 @@
 
 """Example module for Hailo Detection."""
 
-#v0.03
+# v0.04
 
 import argparse
 import cv2
@@ -24,7 +24,7 @@ objects = ["cat","bear","bird"] # maximum 3
 v_width      = 1456 # video width
 v_height     = 1088 # video height
 v_length     = 10   # seconds, minimum video length
-pre_frames   = 5    # seconds, defines length of pre-trigger buffer
+pre_frames   = 5    # seconds, defines length of pre-detection buffer
 fps          = 25   # video frame rate
 mp4_fps      = 25   # mp4 frame rate
 mp4_timer    = 30   # seconds, convert h264s to mp4s after this time if no detections
@@ -85,6 +85,22 @@ def apply_timestamp(request):
           end_point = tuple(lst)
           cv2.rectangle(m.array, origin, end_point, (0,0,0), -1) 
           cv2.putText(m.array, timestamp, origin, font, scale, colour, thickness)
+
+def Camera_Version():
+  global cam1
+  if os.path.exists('/run/shm/libcams.txt'):
+      os.rename('/run/shm/libcams.txt', '/run/shm/oldlibcams.txt')
+  os.system("rpicam-vid --list-cameras >> /run/shm/libcams.txt")
+  time.sleep(0.5)
+  # read libcams.txt file
+  camstxt = []
+  with open("/run/shm/libcams.txt", "r") as file:
+    line = file.readline()
+    while line:
+        camstxt.append(line.strip())
+        line = file.readline()
+  cam1 = camstxt[2][4:10]
+
           
 if __name__ == "__main__":
 
@@ -114,9 +130,11 @@ if __name__ == "__main__":
                     b = y
                 elif c == -1:
                     c = y
-    a = max(a,0)
-    b = max(b,0)
-    c = max(c,0)
+    a = max(a,0) # default to person if no match found
+    b = max(b,0) # default to person if no match found
+    c = max(c,0) # default to person if no match found
+
+    Camera_Version()
 
     # check if clock synchronised
     if "System clock synchronized: yes" in os.popen("timedatectl").read().split("\n"):
@@ -148,11 +166,12 @@ if __name__ == "__main__":
 
         # Configure and start Picamera2.
         with Picamera2() as picam2:
-            main = {'size': (video_w, video_h), 'format': 'XRGB8888'}
+            main  = {'size': (video_w, video_h), 'format': 'XRGB8888'}
             lores = {'size': (model_w, model_h), 'format': 'RGB888'}
-            controls = {'FrameRate': fps}
-            # use next line instead of above if using Pi v3 camera with AF
-            #controls = {'FrameRate': fps,"AfMode": controls.AfModeEnum.Continuous,"AfTrigger": controls.AfTriggerEnum.Start}
+            if cam1 == "imx708":
+                controls = {'FrameRate': fps,"AfMode": controls.AfModeEnum.Continuous,"AfTrigger": controls.AfTriggerEnum.Start}
+            else:
+                controls = {'FrameRate': fps}
             config = picam2.create_preview_configuration(main, lores=lores, controls=controls)
             picam2.configure(config)
             encoder = H264Encoder(2000000, repeat=True)
@@ -183,7 +202,7 @@ if __name__ == "__main__":
 
                 # detection
                 if len(results[0][a]) != 0 or len(results[0][b]) != 0 or len(results[0][c]) != 0:
-                    start = time.monotonic()
+                    start  = time.monotonic()
                     start2 = time.monotonic()
                     # start recording
                     if not encoding and freeram > ram_limit:
@@ -195,7 +214,7 @@ if __name__ == "__main__":
                         print("New  Detection", timestamp)
 
                 # stop recording
-                if encoding and (time.monotonic() - start > v_length or freeram < ram_limit):
+                if encoding and (time.monotonic() - start > v_length or freeram <= ram_limit):
                     now = datetime.datetime.now()
                     timestamp2 = now.strftime("%y%m%d_%H%M%S")
                     print("Stopped Record", timestamp2)
@@ -217,7 +236,7 @@ if __name__ == "__main__":
                         print("Saved",h264s[x][:-5] + '.mp4')
                     Videos = glob.glob('/run/shm/2?????_??????.mp4')
                     Videos.sort()
-                    # move Video RAM Files to SD card
+                    # move Video RAM mp4s to SD card
                     for xx in range(0,len(Videos)):
                         if not os.path.exists(h_user + "/" + '/Videos/' + Videos[xx]):
                             shutil.move(Videos[xx], h_user + '/Videos/')
