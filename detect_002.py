@@ -155,7 +155,7 @@ if __name__ == "__main__":
             #controls = {'FrameRate': fps,"AfMode": controls.AfModeEnum.Continuous,"AfTrigger": controls.AfTriggerEnum.Start}
             config = picam2.create_preview_configuration(main, lores=lores, controls=controls)
             picam2.configure(config)
-            encoder = H264Encoder(4000000, repeat=True)
+            encoder = H264Encoder(2000000, repeat=True)
             encoder.output = CircularOutput(buffersize = pre_frames * fps)
             picam2.pre_callback = apply_timestamp
             picam2.start_preview(Preview.QTGL, x=0, y=0, width=model_w, height=model_h)
