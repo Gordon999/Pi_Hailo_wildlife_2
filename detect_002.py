@@ -2,7 +2,7 @@
 
 """Example module for Hailo Detection."""
 
-# v0.04
+# v0.05
 
 import argparse
 import cv2
@@ -18,7 +18,7 @@ import datetime
 import shutil
 
 # detection objects
-objects = ["cat","bear","bird"] # maximum 3
+objects = ["cat","bear","bird"]
 
 # set variables
 v_width      = 1456 # video width
@@ -113,9 +113,7 @@ if __name__ == "__main__":
 
     # read coco.txt file and set detection object numbers
     names = []
-    a = -1
-    b = -1
-    c = -1
+    objts = []
     with open('/home/' + user + '/picamera2/examples/hailo/coco.txt', "r") as file:
        line = file.readline()
        while line:
@@ -124,15 +122,7 @@ if __name__ == "__main__":
     for x in range(0,len(objects)):
         for y in range(0,len(names)):
             if objects[x] == names[y]:
-                if a == -1:
-                    a = y
-                elif b == -1:
-                    b = y
-                elif c == -1:
-                    c = y
-    a = max(a,0) # default to person if no match found
-    b = max(b,0) # default to person if no match found
-    c = max(c,0) # default to person if no match found
+                objts.append(y)
 
     Camera_Version()
 
@@ -201,11 +191,15 @@ if __name__ == "__main__":
                     detections = extract_detections(results[0], video_w, video_h, class_names, args.score_thresh)
 
                 # detection
-                if len(results[0][a]) != 0 or len(results[0][b]) != 0 or len(results[0][c]) != 0:
-                    start  = time.monotonic()
-                    start2 = time.monotonic()
-                    # start recording
-                    if not encoding and freeram > ram_limit:
+                for d in range(0,len(objts)):
+                  if len(results[0][objts[d]]) != 0:
+                    out1 = str(results[0][objts[d]])[2:-2].split(" ")
+                    out1 = [x for x in out1 if x != '']
+                    if float(out1[4][0:5]) > args.score_thresh and float(out1[4][0:5]) < 1:
+                      start  = time.monotonic()
+                      start2 = time.monotonic()
+                      # start recording
+                      if not encoding and freeram > ram_limit:
                         now = datetime.datetime.now()
                         timestamp = now.strftime("%y%m%d_%H%M%S")
                         encoder.output.fileoutput = "/run/shm/" + str(timestamp) + '.h264'
@@ -234,7 +228,7 @@ if __name__ == "__main__":
                         os.system(cmd)
                         os.remove(h264s[x])
                         print("Saved",h264s[x][:-5] + '.mp4')
-                    Videos = glob.glob('/run/shm/2?????_??????.mp4')
+                    Videos = glob.glob('/run/shm/*.mp4')
                     Videos.sort()
                     # move Video RAM mp4s to SD card
                     for xx in range(0,len(Videos)):
