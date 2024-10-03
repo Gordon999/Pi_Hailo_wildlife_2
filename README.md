@@ -2,6 +2,10 @@
 
 Pi5 + Hailo HAT + PI Camera to capture Wildlife videos
 
+## Screenshot...
+
+![screenshot](screenshot.jpg)
+
 ## My Camera setup...
 
 ![screenshot](camera.jpg)
