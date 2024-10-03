@@ -2,7 +2,13 @@
 
 """Example module for Hailo Detection."""
 
-# v0.05
+# v0.11
+
+import pygame, sys
+from pygame.locals import *
+pygame.init()
+windowSurfaceObj = pygame.display.set_mode((320,450),1, 24)
+pygame.display.set_caption("Review Captures" ) 
 
 import argparse
 import cv2
@@ -16,20 +22,25 @@ import os
 import glob
 import datetime
 import shutil
+from gpiozero import LED
 
 # detection objects
-objects = ["cat","bear","bird"]
+objects = ["cat","bear","bird","clock"]
 
 # set variables
-v_width      = 1456 # video width
-v_height     = 1088 # video height
-v_length     = 10   # seconds, minimum video length
-pre_frames   = 5    # seconds, defines length of pre-detection buffer
-fps          = 25   # video frame rate
-mp4_fps      = 25   # mp4 frame rate
-mp4_timer    = 30   # seconds, convert h264s to mp4s after this time if no detections
-mp4_anno     = 1    # show timestamps on video, 1 = yes, 0 = no
-show_detects = 0    # show detections on video, 1 = yes, 0 = no
+v_width      = 1456  # video width
+v_height     = 1088  # video height
+v_length     = 5     # seconds, minimum video length
+pre_frames   = 5     # seconds, defines length of pre-detection buffer
+fps          = 25    # video frame rate
+mp4_fps      = 25    # mp4 frame rate
+mp4_timer    = 10    # seconds, convert h264s to mp4s after this time if no detections
+mp4_anno     = 1     # show timestamps on video, 1 = yes, 0 = no
+show_detects = 0     # show detections on video, 1 = yes, 0 = no
+led          = 21    # recording led gpio
+mode         = 1     # camera mode, 0-3 = manual,normal,short,long
+speed        = 1000  # manual shutter speed in mS
+gain         = 0     # set camera gain
 
 # mp4_annotation parameters
 colour    = (255, 255, 255)
@@ -40,15 +51,102 @@ thickness = 2
 
 # shutdown time
 sd_hour = 20
-sd_mins = 30
+sd_mins = 0
 auto_sd = 0  # set to 1 to shutdown at set time
 
 # ram limit
 ram_limit = 150 # stops recording if ram below this
 
+config_file = "Det_Config01.txt"
+
+# check Det_configXX.txt exists, if not then write default values
+if not os.path.exists(config_file):
+    defaults = [mode,speed,gain]
+    with open(config_file, 'w') as f:
+        for item in defaults:
+            f.write("%s\n" % item)
+
+# read config file
+defaults = []
+with open(config_file, "r") as file:
+   line = file.readline()
+   while line:
+      defaults.append(line.strip())
+      line = file.readline()
+defaults = list(map(int,defaults))
+mode  = defaults[0]
+speed = defaults[1]
+gain  = defaults[2]
+
+def text(msg,cr,cg,cb,x,y,ft,bw):
+    pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(x,y,bw,20))
+    if os.path.exists ('/usr/share/fonts/truetype/freefont/FreeSerif.ttf'):
+        fontObj = pygame.font.Font('/usr/share/fonts/truetype/freefont/FreeSerif.ttf',ft)
+    else:
+        fontObj = pygame.font.Font(None,ft)
+    msgSurfaceObj = fontObj.render(msg, False, (cr,cg,cb))
+    msgRectobj = msgSurfaceObj.get_rect()
+    msgRectobj.topleft = (x,y)
+    windowSurfaceObj.blit(msgSurfaceObj, msgRectobj)
+    pygame.display.update()
+
 # initialise
-startup = time.monotonic()
-start2  = time.monotonic()
+Users  = []
+Users.append(os.getlogin())
+user   = Users[0]
+h_user = "/home/" + os.getlogin( )
+m_user = "/media/" + os.getlogin( )
+start_up = time.monotonic()
+startmp4 = time.monotonic()
+rec_led  = LED(led)
+rec_led.off()
+p = 0
+modes = ['manual','normal','short','long']
+pygame.draw.rect(windowSurfaceObj,(100,100,100),Rect(1,1,80,50),1)
+pygame.draw.rect(windowSurfaceObj,(100,100,100),Rect(80,1,80,50),1)
+pygame.draw.rect(windowSurfaceObj,(100,100,100),Rect(160,1,80,50),1)
+pygame.draw.rect(windowSurfaceObj,(100,100,100),Rect(240,1,80,50),1)
+pygame.draw.rect(windowSurfaceObj,(100,100,100),Rect(1,400,80,50),1)
+pygame.draw.rect(windowSurfaceObj,(100,100,100),Rect(80,400,80,50),1)
+pygame.draw.rect(windowSurfaceObj,(100,100,100),Rect(240,400,80,50),1)
+text("PREV",100,100,100,10,15,18,60)
+pygame.draw.rect(windowSurfaceObj,(100,100,100),Rect(160,400,80,50),1)
+text("NEXT",100,100,100,90,15,18,60)
+text("MODE",100,100,100,90,402,18,60)
+text(str(modes[mode]),100,100,100,95,420,18,60)
+if mode == 0:
+    text("SPEED",100,100,100,170,402,18,60)
+    text(str(speed),100,100,100,170,420,18,60)
+text("GAIN",100,100,100,250,402,18,60)
+if gain != 0:
+    text(str(gain),100,100,100,250,420,18,60)
+else:
+    text("Auto",100,100,100,250,420,18,60)
+text("Please wait...",100,100,100,10,60,18,60)
+time.sleep(10)
+text("",100,100,100,10,60,18,100)
+
+# show last captured image
+Pics = glob.glob(h_user + '/Pictures/*.jpg')
+Pics.sort()
+if len(Pics) > 0:
+    p = len(Pics) - 1
+    image = pygame.image.load(Pics[p])
+    image = pygame.transform.scale(image,(320,320))
+    windowSurfaceObj.blit(image,(0,51))
+    text(str(p+1) + "/" + str(p+1),100,120,100,10,375,18,60)
+    pic = Pics[p].split("/")
+    pipc = h_user + '/Videos/' + pic[4][:-3] + "mp4"
+    text(str(pic[4]),100,120,100,160,375,18,320)
+    if os.path.exists(pipc):
+        text("DELETE",100,100,100,163,15,18,60)
+        text("DEL ALL",100,100,100,10,415,16,60)
+        USB_Files  = []
+        USB_Files  = (os.listdir(m_user))
+        if len(USB_Files) > 0:
+            text("  to USB",100,100,100,243,15,18,60)
+    pygame.display.update()
+pygame.display.update()
 
 def extract_detections(hailo_output, w, h, class_names, threshold=0.5):
     """Extract detections from the HailoRT-postprocess output."""
@@ -87,29 +185,21 @@ def apply_timestamp(request):
           cv2.putText(m.array, timestamp, origin, font, scale, colour, thickness)
 
 def Camera_Version():
-  global cam1
-  if os.path.exists('/run/shm/libcams.txt'):
-      os.rename('/run/shm/libcams.txt', '/run/shm/oldlibcams.txt')
-  os.system("rpicam-vid --list-cameras >> /run/shm/libcams.txt")
-  time.sleep(0.5)
-  # read libcams.txt file
-  camstxt = []
-  with open("/run/shm/libcams.txt", "r") as file:
-    line = file.readline()
-    while line:
-        camstxt.append(line.strip())
+    global cam1
+    if os.path.exists('/run/shm/libcams.txt'):
+        os.rename('/run/shm/libcams.txt', '/run/shm/oldlibcams.txt')
+    os.system("rpicam-vid --list-cameras >> /run/shm/libcams.txt")
+    time.sleep(0.5)
+    # read libcams.txt file
+    camstxt = []
+    with open("/run/shm/libcams.txt", "r") as file:
         line = file.readline()
-  cam1 = camstxt[2][4:10]
-
+        while line:
+            camstxt.append(line.strip())
+            line = file.readline()
+    cam1 = camstxt[2][4:10]
           
 if __name__ == "__main__":
-
-    # find user
-    Users  = []
-    Users.append(os.getlogin())
-    user   = Users[0]
-    h_user = "/home/" + os.getlogin( )
-    m_user = "/media/" + os.getlogin( )
 
     # read coco.txt file and set detection object numbers
     names = []
@@ -124,13 +214,8 @@ if __name__ == "__main__":
             if objects[x] == names[y]:
                 objts.append(y)
 
+    # get camera version
     Camera_Version()
-
-    # check if clock synchronised
-    if "System clock synchronized: yes" in os.popen("timedatectl").read().split("\n"):
-        synced = 1
-    else:
-        synced = 0
 
     # Parse command-line arguments.
     parser = argparse.ArgumentParser(description="Detection Example")
@@ -159,21 +244,32 @@ if __name__ == "__main__":
             main  = {'size': (video_w, video_h), 'format': 'XRGB8888'}
             lores = {'size': (model_w, model_h), 'format': 'RGB888'}
             if cam1 == "imx708":
-                controls = {'FrameRate': fps,"AfMode": controls.AfModeEnum.Continuous,"AfTrigger": controls.AfTriggerEnum.Start}
+                controls2 = {'FrameRate': fps,"AfMode": controls.AfModeEnum.Continuous,"AfTrigger": controls.AfTriggerEnum.Start}
             else:
-                controls = {'FrameRate': fps}
-            config = picam2.create_preview_configuration(main, lores=lores, controls=controls)
+                controls2 = {'FrameRate': fps}
+            config = picam2.create_preview_configuration(main, lores=lores, controls=controls2)
             picam2.configure(config)
             encoder = H264Encoder(2000000, repeat=True)
             encoder.output = CircularOutput(buffersize = pre_frames * fps)
             picam2.pre_callback = apply_timestamp
-            picam2.start_preview(Preview.QTGL, x=0, y=0, width=model_w, height=model_h)
+            picam2.start_preview(Preview.QTGL, x=0, y=0, width=480, height=480)
             picam2.start()
+            picam2.title_fields = ["ExposureTime"]
             picam2.start_encoder(encoder)
             encoding = False
             if show_detects == 1:
                 picam2.pre_callback = draw_objects
-
+            picam2.set_controls({"AnalogueGain": gain})
+            if mode == 0:
+                picam2.set_controls({"AeEnable": False,"ExposureTime": speed})
+            else:
+                if mode == 1:
+                    picam2.set_controls({"AeEnable": True,"AeExposureMode": controls.AeExposureModeEnum.Normal})
+                elif mode == 2:
+                    picam2.set_controls({"AeEnable": True,"AeExposureMode": controls.AeExposureModeEnum.Short})
+                elif mode == 3:
+                    picam2.set_controls({"AeEnable": True,"AeExposureMode": controls.AeExposureModeEnum.Long})
+            
             # Process each low resolution camera frame.
             while True:
                 # get free ram space
@@ -192,33 +288,55 @@ if __name__ == "__main__":
 
                 # detection
                 for d in range(0,len(objts)):
-                  if len(results[0][objts[d]]) != 0:
-                    out1 = str(results[0][objts[d]])[2:-2].split(" ")
-                    out1 = [x for x in out1 if x != '']
-                    if float(out1[4][0:5]) > args.score_thresh and float(out1[4][0:5]) < 1:
-                      start  = time.monotonic()
-                      start2 = time.monotonic()
-                      # start recording
-                      if not encoding and freeram > ram_limit:
-                        now = datetime.datetime.now()
-                        timestamp = now.strftime("%y%m%d_%H%M%S")
-                        encoder.output.fileoutput = "/run/shm/" + str(timestamp) + '.h264'
-                        encoder.output.start()
-                        encoding = True
-                        print("New  Detection", timestamp)
+                    if len(results[0][objts[d]]) != 0:
+                        out1 = str(results[0][objts[d]])[2:-2].split(" ")
+                        out1 = [x for x in out1 if x != '']
+                        value = float(out1[4][0:5])
+                        if value > args.score_thresh and value < 1:
+                            startrec = time.monotonic()
+                            startmp4 = time.monotonic()
+                            # start recording
+                            if not encoding and freeram > ram_limit:
+                                now = datetime.datetime.now()
+                                timestamp = now.strftime("%y%m%d_%H%M%S")
+                                encoder.output.fileoutput = "/run/shm/" + str(timestamp) + '.h264'
+                                encoder.output.start()
+                                encoding = True
+                                print("New  Detection",timestamp,names[objts[d]])
+                                rec_led.on()
+                                # save lores image
+                                cv2.imwrite(h_user + "/Pictures/" + str(timestamp) + ".jpg",frame)
+                                # show captured lores trigger image
+                                Pics = glob.glob(h_user + '/Pictures/*.jpg')
+                                Pics.sort()
+                                p = len(Pics)-1
+                                img = cv2.cvtColor(frame,cv2.COLOR_RGB2BGR)
+                                image = pygame.surfarray.make_surface(img)
+                                image = pygame.transform.scale(image,(320,320))
+                                image = pygame.transform.rotate(image,int(90))
+                                image = pygame.transform.flip(image,0,1)
+                                windowSurfaceObj.blit(image,(0,51))
+                                text(str(p+1) + "/" + str(p+1),100,120,100,10,375,18,60)
+                                #pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(0,371,320,20))
+                                pic = Pics[p].split("/")
+                                text(str(pic[4]),100,120,100,160,375,18,320)
+                                text("    ",100,100,100,163,15,18,70)
+                                text("    ",100,100,100,243,15,18,70)
+                                pygame.display.update()
 
                 # stop recording
-                if encoding and (time.monotonic() - start > v_length or freeram <= ram_limit):
+                if encoding and (time.monotonic() - startrec > v_length or freeram <= ram_limit):
                     now = datetime.datetime.now()
                     timestamp2 = now.strftime("%y%m%d_%H%M%S")
                     print("Stopped Record", timestamp2)
                     encoder.output.stop()
                     encoding = False
-                    start2 = time.monotonic()
+                    startmp4 = time.monotonic()
+                    rec_led.off()
 
                 # make mp4s
-                if time.monotonic() - start2 > mp4_timer and not encoding:
-                    start2 = time.monotonic()
+                if time.monotonic() - startmp4 > mp4_timer and not encoding:
+                    startmp4 = time.monotonic()
                     # convert h264 to mp4
                     h264s = glob.glob('/run/shm/2*.h264')
                     h264s.sort(reverse = False)
@@ -234,6 +352,26 @@ if __name__ == "__main__":
                     for xx in range(0,len(Videos)):
                         if not os.path.exists(h_user + "/" + '/Videos/' + Videos[xx]):
                             shutil.move(Videos[xx], h_user + '/Videos/')
+                    Pics = glob.glob(h_user + '/Pictures/*.jpg')
+                    Pics.sort()
+                    if len(Pics) > 0:
+                      pic = Pics[p].split("/")
+                      pipc = h_user + '/Videos/' + pic[4][:-3] + "mp4"
+                      if os.path.exists(pipc):
+                        text("DELETE",100,100,100,163,15,18,60)
+                        text("DEL ALL",100,100,100,10,415,16,60)
+                        USB_Files  = []
+                        USB_Files  = (os.listdir(m_user))
+                        if len(USB_Files) > 0:
+                            text("  to USB",100,100,100,243,15,18,60)
+                      else:
+                        text("    ",100,100,100,163,15,18,70)
+                        text("    ",100,100,100,243,15,18,70)
+                        text("    ",100,100,100,10,415,18,70)
+                    else:
+                        text("    ",100,100,100,163,15,18,70)
+                        text("    ",100,100,100,243,15,18,70)
+                        text("    ",100,100,100,10,415,18,70)
 
                     # auto shutdown
                     if auto_sd == 1:
@@ -246,7 +384,8 @@ if __name__ == "__main__":
                         now = datetime.datetime.now()
                         sd_time = now.replace(hour=sd_hour, minute=sd_mins, second=0, microsecond=0)
                         if now >= sd_time and time.monotonic() - startup > 300 and synced == 1:
-                            # move mp4s to USB if present
+                            # move jpgs and mp4s to USB if present
+                            time.sleep(2 * mp4_timer)
                             USB_Files  = []
                             USB_Files  = (os.listdir(m_user))
                             if len(USB_Files) > 0:
@@ -259,8 +398,219 @@ if __name__ == "__main__":
                                     movi = Videos[xx].split("/")
                                     if not os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + movi[4]):
                                         shutil.move(Videos[xx],m_user + "/" + USB_Files[0] + "/Videos/")
+                                Pics = glob.glob(h_user + '/Pictures/*.jpg')
+                                Pics.sort()
+                                for xx in range(0,len(Pics)):
+                                    pic = Pics[xx].split("/")
+                                    if not os.path.exists(m_user + "/" + USB_Files[0] + "/Pictures/" + pic[4]):
+                                        shutil.move(Pics[xx],m_user + "/" + USB_Files[0] + "/Pictures/")
                             time.sleep(5)
                             # shutdown
                             os.system("sudo shutdown -h now")
 
+                #check for any mouse button presses
+                for event in pygame.event.get():
+                    if (event.type == MOUSEBUTTONUP):
+                        mousex, mousey = event.pos
+                        # delete ALL Pictures and Videos
+                        if mousex < 80 and mousey > 400 and event.button == 3:
+                            Videos = glob.glob(h_user + '/Videos/*.mp4')
+                            Videos.sort()
+                            for w in range(0,len(Videos)):
+                                os.remove(Videos[w])
+                            Pics = glob.glob(h_user + '/Pictures/*.jpg')
+                            Pics.sort()
+                            for w in range(0,len(Pics)):
+                                os.remove(Pics[w])
+                            pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(0,371,320,28))
+                            pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(0,51,320,320))
+                            p = 0
+                        # camera control
+                        # MODE
+                        if mousex > 80 and mousex < 160 and mousey > 400:
+                            if event.button == 3 or event.button == 5:
+                                mode -=1
+                                if mode < 0:
+                                    mode = 3
+                            else:
+                                mode +=1
+                                if mode > 3:
+                                    mode = 0
+                            text(str(modes[mode]),100,100,100,95,420,18,60)
+                            if mode == 0:
+                                picam2.set_controls({"AeEnable": False,"ExposureTime": speed,"AnalogueGain": gain})
+                                text("SPEED",100,100,100,170,402,18,60)
+                                text(str(speed),100,100,100,170,420,18,60)
+                            else:
+                                if mode == 1:
+                                    picam2.set_controls({"AeEnable": True,"AeExposureMode": controls.AeExposureModeEnum.Normal,"AnalogueGain": gain})
+                                elif mode == 2:
+                                    picam2.set_controls({"AeEnable": True,"AeExposureMode": controls.AeExposureModeEnum.Short,"AnalogueGain": gain})
+                                elif mode == 3:
+                                    picam2.set_controls({"AeEnable": True,"AeExposureMode": controls.AeExposureModeEnum.Long,"AnalogueGain": gain})
+                                text(" ",100,100,100,170,402,18,60)
+                                text(" ",100,100,100,170,420,18,60)
+                        # SHUTTER SPEED
+                        if mousex > 160 and mousex < 240 and mousey > 400 and mode == 0:
+                            if event.button == 3 or event.button == 5:
+                                speed -=1000
+                                speed = max(1000,speed)
+                            else:
+                                speed += 1000
+                                speed = min(100000,speed)
+                            picam2.set_controls({"AeEnable": False,"ExposureTime": speed,"AnalogueGain": gain})
+                            text("SPEED",100,100,100,170,402,18,60)
+                            text(str(speed),100,100,100,170,420,18,60)
+                        # GAIN
+                        if mousex > 240 and mousey > 400:
+                            if event.button == 3 or event.button == 5:
+                                gain -=1
+                                gain = max(0,gain)
+                            else:
+                                gain +=1
+                                gain = min(64,gain)
+                            picam2.set_controls({"AnalogueGain": gain})
+                            text("GAIN",100,100,100,250,402,18,60)
+                            if gain != 0:
+                                text(str(gain),100,100,100,250,420,18,60)
+                            else:
+                                text("Auto",100,100,100,250,420,18,60)
+                            
+                        # show previous
+                        elif mousex < 80 and mousey < 50:
+                            Pics = glob.glob(h_user + '/Pictures/*.jpg')
+                            Pics.sort()
+                            p -= 1
+                            if p < 0:
+                                p = 0
+                            if len(Pics) > 0:
+                                image = pygame.image.load(Pics[p])
+                                image = pygame.transform.scale(image,(320,320))
+                                windowSurfaceObj.blit(image,(0,51))
+                                text(str(p+1) + "/" + str(p+1),100,120,100,10,375,18,60)
+                                pic = Pics[p].split("/")
+                                text(str(pic[4]),100,120,100,160,375,18,320)
+                                pygame.display.update()
+                        # show next
+                        elif mousex > 80 and mousex < 160 and mousey < 50:
+                            Pics = glob.glob(h_user + '/Pictures/*.jpg')
+                            Pics.sort()
+                            p += 1
+                            if p > len(Pics)-1:
+                                p = len(Pics)-1
+                            if len(Pics) > 0:
+                                image = pygame.image.load(Pics[p])
+                                image = pygame.transform.scale(image,(320,320))
+                                windowSurfaceObj.blit(image,(0,51))
+                                pic = Pics[p].split("/")
+                                text(str(pic[4]),100,120,100,160,375,18,320)
+                                text(str(p+1) + "/" + str(p+1),100,120,100,10,375,18,60)
+                                pygame.display.update()
+                        # delete picture and video
+                        elif mousex > 160 and mousex < 240 and mousey < 50 and event.button == 3:
+                            pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(0,51,320,320))
+                            Pics = glob.glob(h_user + '/Pictures/*.jpg')
+                            Pics.sort()
+                            Videos = glob.glob(h_user + '/Videos/*.mp4')
+                            Videos.sort()
+                            if len(Pics) > 0:
+                                pic = Pics[p].split("/")
+                                pipc = h_user + '/Videos/' + pic[4][:-3] + "mp4"
+                                if os.path.exists(pipc):
+                                   os.remove(Pics[p])
+                                   if len(Videos) > 0:
+                                       os.remove(pipc)
+                                       print("DELETED", pipc)
+                                Videos = glob.glob(h_user + '/Videos/*.mp4')
+                                Videos.sort()
+                                Pics = glob.glob(h_user + '/Pictures/*.jpg')
+                                Pics.sort()
+                            if p > len(Pics) - 1:
+                                p -= 1
+                            if len(Pics) > 0:
+                                image = pygame.image.load(Pics[p])
+                                image = pygame.transform.scale(image,(320,320))
+                                windowSurfaceObj.blit(image,(0,51))
+                                pic = Pics[p].split("/")
+                                text(str(pic[4]),100,120,100,160,375,18,320)
+                            else:
+                                pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(0,375,320,20))
+                            pygame.display.update()
+                        # move picture and video to USB
+                        elif mousex > 240 and mousey < 50:
+                            pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(0,51,320,320))
+                            Pics = glob.glob(h_user + '/Pictures/*.jpg')
+                            Pics.sort()
+                            Videos = glob.glob(h_user + '/Videos/*.mp4')
+                            Videos.sort()
+                            if len(Pics) > 0:
+                                pic = Pics[p].split("/")
+                                pipc = h_user + '/Videos/' + pic[4][:-3] + "mp4"
+                                # move mp4s to USB if present
+                                USB_Files  = []
+                                USB_Files  = (os.listdir(m_user))
+                                if len(USB_Files) > 0:
+                                    usedusb = os.statvfs(m_user + "/" + USB_Files[0] + "/")
+                                    USB_storage = ((1 - (usedusb.f_bavail / usedusb.f_blocks)) * 100)
+                                if len(USB_Files) > 0 and USB_storage < 90 and os.path.exists(pipc):
+                                    if not os.path.exists(m_user + "/" + USB_Files[0] + "/Pictures/" + pic[4]):
+                                        shutil.move(Pics[p],m_user + "/" + USB_Files[0] + "/Pictures/")
+                                    if os.path.exists(pipc):
+                                        vid = pipc.split("/")
+                                        if not os.path.exists(m_user + "/" + USB_Files[0] + "/Videos/" + vid[4]):
+                                            shutil.move(Videos[p],m_user + "/" + USB_Files[0] + "/Videos/")
+                                Videos = glob.glob(h_user + '/Videos/*.mp4')
+                                Videos.sort()
+                                Pics = glob.glob(h_user + '/Pictures/*.jpg')
+                                Pics.sort()
+                            if p > len(Pics) - 1:
+                                p -= 1
+                            if len(Pics) > 0:
+                                image = pygame.image.load(Pics[p])
+                                image = pygame.transform.scale(image,(320,320))
+                                windowSurfaceObj.blit(image,(0,51))
+                                pic = Pics[p].split("/")
+                                text(str(pic[4]),100,120,100,160,375,18,320)
+                            else:
+                                pygame.draw.rect(windowSurfaceObj,(0,0,0),Rect(0,375,320,20))
+                            pygame.display.update()
+                        Videos = glob.glob(h_user + '/Videos/*.mp4')
+                        Videos.sort()
+                        Pics = glob.glob(h_user + '/Pictures/*.jpg')
+                        Pics.sort()
+                        Pics = glob.glob(h_user + '/Pictures/*.jpg')
+                        Pics.sort()
+                        if len(Pics) > 0:
+                            pic = Pics[p].split("/")
+                            pipc = h_user + '/Videos/' + pic[4][:-3] + "mp4"
+                            if os.path.exists(pipc):
+                                text("DELETE",100,100,100,163,15,18,60)
+                                text("DEL ALL",100,100,100,10,415,16,60)
+                                USB_Files  = []
+                                USB_Files  = (os.listdir(m_user))
+                                if len(USB_Files) > 0:
+                                    text("  to USB",100,100,100,243,15,18,60)
+                            else:
+                                text("    ",100,100,100,163,15,18,70)
+                                text("    ",100,100,100,243,15,18,70)
+                                text("    ",100,100,100,10,415,18,70)
+                        else:
+                            text("    ",100,100,100,163,15,18,70)
+                            text("    ",100,100,100,243,15,18,70)
+                            text("    ",100,100,100,10,415,18,70)
 
+                        if len(Pics) > 0:
+                            msg = str(p+1) + "/" + str(len(Pics))
+                            pic = Pics[p].split("/")
+                            text(str(pic[4]),100,120,100,160,375,18,320)
+                        else:
+                            msg = str(len(Pics))
+                        text(msg,100,120,100,10,375,18,60)
+                        pygame.display.update()
+
+                        defaults[0] = mode
+                        defaults[1] = speed
+                        defaults[2] = gain
+                        with open(config_file, 'w') as f:
+                            for item in defaults:
+                                f.write("%s\n" % item)
