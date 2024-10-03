@@ -42,6 +42,6 @@ python3 detect_002.py
 
 When running you will see 2 windows, a live window and a capture review and control window.
 On the Capture review window you can see the triggered frame from  the videos, step through them with PREV/NEXT,
-DELETE individual ones with DEL ( needs right mouse click), copy video and frame to USB with to USB.
+DELETE individual ones with DELETE ( needs right mouse click), copy video and frame to USB with to USB.
 
 at the bottom you have DELETE ALL ( right mouse click), and camera controls for MODE, SHUTTER SPEED and GAIN.
